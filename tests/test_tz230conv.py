@@ -36,7 +36,8 @@ class TestFormulasOnH40Sample(unittest.TestCase):
     def h40_plan(self, array, rest):
         cfg = copy.deepcopy(CFG)
         cfg["synthe"].update(obs_freq=43.0e9, freq_if1=6.0e9, sideband="USB")
-        cfg["arrays"] = {str(array): {"rest_freq": rest, "sideband": "USB", "rx_name": "H40"}}
+        rx = cfg["dat_switch"][array - 1][0]  # .dat のスイッチ欄と合わせる（式の検算には効かない）
+        cfg["arrays"] = {str(array): {"rest_freq": rest, "sideband": "USB", "rx_name": rx}}
         return c.Plan(cfg, WINDOW)
 
     def test_fqdat_and_lo2(self):
@@ -83,25 +84,25 @@ class TestConvert(unittest.TestCase):
         self.assertIn("SET SYNTHE_N RX_NAME 'TZ230DSB'", out)
         self.assertIn("SET ANT POINTING 'TZ2'", out)
         self.assertIn("SET RXT RX_NAME 'TZ230DSB,,,,,,,'", out)
-        self.assertIn("SET SAM45 QL_RMSARY 'A15'", out)
+        self.assertIn("SET SAM45 QL_RMSARY 'A11'", out)
         self.assertFalse(any("SYNTHE_K" in l for l in out if not l.startswith(("#", "%"))))
         self.assertTrue(all(l.startswith("# ") for l in out if "MLPPS" in l))
-        self.assertEqual(sam45_list(out, "RX_NAME")[14:16], ["TZ2H", "TZ2H"])
-        self.assertEqual(sam45_list(out, "SIDBD_TYP")[14:16], ["USB", "LSB"])
-        self.assertEqual(sam45_list(out, "REST_FREQ")[14:16], ["2.30538E11", "2.1559595E11"])
+        self.assertEqual(sam45_list(out, "RX_NAME")[10:12], ["TZ2V", "TZ2V"])
+        self.assertEqual(sam45_list(out, "SIDBD_TYP")[10:12], ["USB", "LSB"])
+        self.assertEqual(sam45_list(out, "REST_FREQ")[10:12], ["2.30538E11", "2.1559595E11"])
         for par in ("START_CHAN_SUB1", "END_CHAN_SUB1", "CHAN_AVG_SUB1"):  # 窓は入力のまま
             self.assertEqual(sam45_list(out, par), sam45_list(self.src, par), par)
-        self.assertEqual(sam45_list(out, "OBS_BAND")[14:16], ["1.25E8", "1.25E8"])
+        self.assertEqual(sam45_list(out, "OBS_BAND")[10:12], ["1.25E8", "1.25E8"])
         for n, a in self.plan.arrays.items():  # 線は 2nd IF 3 GHz（2nd LO の 1 kHz の丸めの分だけずれる）
             self.assertAlmostEqual(a["f2_line"], 3.0e9, delta=1e3)
-        # A15・A16 以外はデフォルト値（文字列は空、小数は 0.0、整数は 0）
-        self.assertEqual(sam45_list(out, "RX_NAME"), [""] * 14 + ["TZ2H", "TZ2H"] + [""] * 16)
-        self.assertEqual(sam45_list(out, "REST_FREQ"), ["0.0"] * 14 + ["2.30538E11", "2.1559595E11"] + ["0.0"] * 16)
-        self.assertEqual(sam45_list(out, "ARRAY"), ["0"] * 14 + ["1", "1"] + ["0"] * 16)
-        self.assertEqual(sam45_list(out, "REF_NUM"), ["0"] * 14 + ["14", "14"] + ["0"] * 16)  # SYNTHE_N は 14
-        self.assertEqual(sam45_list(out, "IFATT"), ["0"] * 14 + ["5", "5"] + ["0"] * 16)
-        self.assertEqual(sam45_list(out, "FQDAT_CH"), ["0"] * 28 + ["4096", "1", "4096", "1"] + ["0"] * 32)
-        self.assertEqual(sam45_list(out, "FQDAT_FQ")[28:30], ["2.3047552E11", "2.3060048E11"])
+        # A11・A12 以外はデフォルト値（文字列は空、小数は 0.0、整数は 0）
+        self.assertEqual(sam45_list(out, "RX_NAME"), [""] * 10 + ["TZ2V", "TZ2V"] + [""] * 20)
+        self.assertEqual(sam45_list(out, "REST_FREQ"), ["0.0"] * 10 + ["2.30538E11", "2.1559595E11"] + ["0.0"] * 20)
+        self.assertEqual(sam45_list(out, "ARRAY"), ["0"] * 10 + ["1", "1"] + ["0"] * 20)
+        self.assertEqual(sam45_list(out, "REF_NUM"), ["0"] * 10 + ["14", "14"] + ["0"] * 20)  # SYNTHE_N は 14
+        self.assertEqual(sam45_list(out, "IFATT"), ["0"] * 10 + ["5", "5"] + ["0"] * 20)
+        self.assertEqual(sam45_list(out, "FQDAT_CH"), ["0"] * 20 + ["4096", "1", "4096", "1"] + ["0"] * 40)
+        self.assertEqual(sam45_list(out, "FQDAT_FQ")[20:22], ["2.3047552E11", "2.3060048E11"])
         for l in out:
             m = re.match(r"SET SAM45 (\S+) (.*)$", l)
             if not m or "," not in m.group(2):
@@ -109,7 +110,7 @@ class TestConvert(unittest.TestCase):
             items = c.parse_list(m.group(2))[0]
             per = len(items) // 32
             if len(items) in (32, 64):
-                others = [x for j, x in enumerate(items) if j // per + 1 not in (15, 16)]
+                others = [x for j, x in enumerate(items) if j // per + 1 not in (11, 12)]
                 self.assertTrue(all(x in ("", "0", "0.0") for x in others), l)
             else:  # SpW・サブアレイごとのものは元のまま
                 self.assertIn(l, self.src)
@@ -141,8 +142,9 @@ class TestConvert(unittest.TestCase):
     def test_dat(self):
         out, notes = c.convert_dat(c.read_lines(SAMPLE_DAT), self.plan)
         self.assertEqual(notes, [])
-        self.assertEqual(out[14], "15,TZ2H  ,LSB,10338.000")
-        self.assertEqual(out[15], "16,TZ2H  ,LSB,10604.050")
+        self.assertEqual(out[10], "11,TZ2V  ,LSB,10338.000")
+        self.assertEqual(out[11], "12,TZ2V  ,LSB,10604.050")
+        self.assertEqual(out[14], "15,TZ2H  ,LSB,8821.000")  # 使わない行は入力の 2nd LO のまま
         self.assertEqual(out[0], "01,H20ch1,USB,9122.000")
         self.assertEqual(out[8], "09,H40   ,USB,8821.000")
         self.assertEqual(out[4], "05,#     ,")
@@ -156,11 +158,18 @@ class TestConvert(unittest.TestCase):
         self.assertEqual(out[1], "02,H20ch1,USB,9122.000")
         self.assertEqual(out[2], "03,H20ch2,USB,")
         self.assertEqual(out[4], "05,#     ,")
-        self.assertEqual(out[14], "15,TZ2H  ,LSB,10338.000")
-        self.assertEqual(out[15], "16,TZ2H  ,LSB,10604.050")
+        self.assertEqual(out[10], "11,TZ2V  ,LSB,10338.000")
+        self.assertEqual(out[11], "12,TZ2V  ,LSB,10604.050")
+        self.assertEqual(out[14], "15,TZ2H  ,LSB,")
         self.assertEqual(len(notes), 1)
         out2, _ = c.convert_dat([], self.plan)
-        self.assertEqual(out2[14], "15,TZ2H  ,LSB,10338.000")
+        self.assertEqual(out2[10], "11,TZ2V  ,LSB,10338.000")
+
+    def test_dat_switch_must_match_rx_name(self):
+        cfg = copy.deepcopy(CFG)
+        cfg["arrays"]["11"]["rx_name"] = "TZ2H"  # .dat の 11 行目は TZ2V
+        with self.assertRaises(c.ConvError):
+            c.Plan(cfg, WINDOW)
 
     def test_start_chan_multiple_of_64(self):
         self.assertEqual(self.plan.start_chan % 64, 0)

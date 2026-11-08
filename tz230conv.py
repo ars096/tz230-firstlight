@@ -139,6 +139,13 @@ class Plan:
         self.dat_switch = cfg["dat_switch"]
         if len(self.dat_switch) != 16:
             raise ConvError("dat_switch は 16 行")
+        for key, a in cfg["arrays"].items():
+            n = int(key)
+            if not 1 <= n <= 16:
+                raise ConvError("arrays の A%02d は A01〜A16 のどれか" % n)
+            if self.dat_switch[n - 1][0] != a["rx_name"]:
+                raise ConvError("A%02d: .dat のスイッチ %s と SAM45 RX_NAME %s が食い違う"
+                                % (n, self.dat_switch[n - 1][0], a["rx_name"]))
 
         self.arrays = {}
         for key, a in sorted(cfg["arrays"].items()):
@@ -288,7 +295,7 @@ REQUIRED = [
 
 
 def reset_other_arrays(val, plan, i, par):
-    """SAM45 の Array ごとのリストで、使う Array（A15・A16）以外をデフォルト値にする。
+    """SAM45 の Array ごとのリストで、使う Array（設定の arrays、今は A11・A12）以外をデフォルト値にする。
 
     要素が 32 個なら A01〜A32 に 1 つずつ、64 個なら 2 つずつ（FQDAT_FQ・FQDAT_CH・CH_RANGE）。
     2 個以下は Array ごとではない（SpW・サブアレイごと、天体の位置など）ので変えない。
@@ -415,7 +422,7 @@ DAT_FREQ = re.compile(r"^\s*(\d+)\s*,.*,\s*(\d+(\.\d*)?)\s*$")
 def convert_dat(lines, plan):
     """入力の形によらず、決まった書式（config の dat_switch）で 16 行を書く。
 
-    A15・A16 などの使う Array は 2nd LO を書く。それ以外の行は、入力の同じ番号の行に
+    使う Array（設定の arrays）は 2nd LO を書く。それ以外の行は、入力の同じ番号の行に
     2nd LO があればそれを残し、なければ周波数を書かない。`#` の行は周波数を書かない。
     戻り値は (書き出す行, 注意のメッセージのリスト)。
     """

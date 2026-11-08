@@ -62,36 +62,37 @@ RF (OBS_FREQ) --1st LO--> 1st IF (FREQ_IF1) --2nd LO (.dat, MHz)--> 2nd IF 2–4
 ## 決まったこと（2026-11-09）
 
 - TZ 86 GHz 単独の指示書はないので、**H40 の指示書を元に**変換する。
-- 230 GHz モードは **DSB**。IF は既存の TZ2H のポートを流用し、SAM45 の **A15・A16** に入る。
-- 1st LO は 223.2 GHz。A15 を USB で CO(2–1)（230.538 GHz）、A16 を LSB で SiO v=1 (5–4)（215.59595 GHz）にする。
+- 230 GHz モードは **DSB**。IF は既存の **TZ2V** のポートを流用し、SAM45 の **A11・A12** に入る。
+  （はじめ TZ2H・A15・A16 と聞いていたが、TZ2V・A11・A12 だった。2026-11-09）
+- 1st LO は 223.2 GHz。A11 を USB で CO(2–1)（230.538 GHz）、A12 を LSB で SiO v=1 (5–4)（215.59595 GHz）にする。
   1st IF は CO 7.338 GHz、SiO 7.604 GHz。
 - 共通 IF 系は 1st IF 4–8 GHz を 2nd IF 2–4 GHz に落とす。2nd LO は 8–10 GHz と聞いていたが、
   **12 GHz くらいまで大丈夫かもしれない**（2026-11-09、未確認）ので、スクリプトは 8–12 GHz を許す。
 - **線が 2nd IF 3 GHz に来るよう、2nd LO を Array ごとに決める**（2026-11-09）。2nd LO = 1st IF(線) + 3 GHz で、
-  1 kHz（.dat の MHz 小数 3 桁）に丸める。A15 は 10338.000 MHz、A16 は 10604.050 MHz。
+  1 kHz（.dat の MHz 小数 3 桁）に丸める。A11 は 10338.000 MHz、A12 は 10604.050 MHz。
 - 線が 3 GHz に来るので、**SAM45 の窓は nobs が出したまま変えない**（設定の `window` が `null`）。
   H40 のサンプルでは 2.9375–3.0625 GHz（125 MHz、30.5 kHz/ch）で、230 GHz では ±約 81 km/s にあたる。
   （いったん 2nd LO 10000 MHz・窓 2.25–2.75 GHz にしたが、上の方針に置き換えた。窓を変えたいときは設定の `window` に書く。）
 - `SYNTHE_N` は CO を基準にする（`OBS_FREQ` 230.538 GHz、`FREQ_IF1` 7.338 GHz、USB）。DSB なので LSB の SiO は
   ドップラー追尾が少しずれる（v = 30 km/s で約 1.5 MHz）が、ファーストライトでは許容する。
-- `SET SAM45` の Array ごとのリスト（要素 32 個、または Array ごとに 2 つで 64 個）は、**A15・A16 以外をデフォルト値にする**
+- `SET SAM45` の Array ごとのリスト（要素 32 個、または Array ごとに 2 つで 64 個）は、**A11・A12 以外をデフォルト値にする**
   （2026-11-09）。文字列は空、小数は `0.0`、整数は `0`。`ARRAY`（有効フラグ）・`IFATT` なども含む。
-  要素 2 個のもの（SpW・サブアレイごとの設定、`SRC_POS`）は変えない。`QL_RMSARY` は `A15`。
+  要素 2 個のもの（SpW・サブアレイごとの設定、`SRC_POS`）は変えない。`QL_RMSARY` は `A11`。
   （それまでは A01〜A14 を H40 の値のまま残していた。）
 - `.dat` は受信機名とサイドバンドの組み合わせでスイッチを制御しており、周波数の計算には使わない。
-  A15・A16 も `TZ2H,LSB`。A15・A16 以外の 2nd LO は元の値を残す。`#` の行は周波数を書かず `05,#     ,` とする。
+  A11・A12 も `TZ2V,LSB`。A11・A12 以外の 2nd LO は、入力にあれば元の値を残す。`#` の行は周波数を書かず `05,#     ,` とする。
 - SAM45 の `START_CHAN` は 16 か 64 の倍数のはずなので、念のため 64 の倍数に限る（サンプルの 245760 = 64 × 3840）。
 - `.start` の書き換え:
   - SG は 1 つだけ使う。`SYNTHE_K` を **`SYNTHE_N`** にし、`SET SYNTHE_N RX_NAME 'TZ230DSB'`。
   - `SET SAM45 REF_NUM`（Array が参照する SG の番号）は、`SYNTHE_N` に対応する **14**（H40 の `SYNTHE_K` は 11）。
   - `SET ANT POINTING 'TZ2'`。
-  - `SET SAM45 RX_NAME` は `TZ2H`。
+  - `SET SAM45 RX_NAME` は `TZ2V`（使う Array の `.dat` のスイッチ欄と食い違えば止まる）。
   - 冒頭の MLPPS（LO スイッチの切り替え）は `#` でコメントアウトする。
   - `%` で始まる行はコメントなので変えない。
-- `.dat` は周波数以外を決まった形（A15・A16 は `TZ2H`）にする。
+- `.dat` は周波数以外を決まった形（A11・A12 は `TZ2V`）にする。
 - サンプルの観測者 ID は伏せる（公開リポジトリのため）。
 
 ## 未決のこと
 
-- [ ] SAM45 の `OBS_FREQ`・`FREQ_IF1` の LSB の Array での書き方（今は A16 を `OBS_FREQ` 215.862 GHz・`FREQ_IF1` 7.338 GHz とし、1st LO = `OBS_FREQ` + `FREQ_IF1` で結んでいる）
+- [ ] SAM45 の `OBS_FREQ`・`FREQ_IF1` の LSB の Array での書き方（今は A12 を `OBS_FREQ` 215.862 GHz・`FREQ_IF1` 7.338 GHz とし、1st LO = `OBS_FREQ` + `FREQ_IF1` で結んでいる）
 - [ ] OTF・ポインティングの指示書でも同じ変換で通るか（今あるサンプルは PSW のみ）
