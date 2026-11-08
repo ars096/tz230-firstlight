@@ -360,26 +360,36 @@ def handle_set(dev, par, val, plan, i):
 
 # ---------------------------------------------------------------- .dat
 
-DAT_LINE = re.compile(r"^(\d\d),([^,]*),([^,]*),(\d+\.\d+)$")
+DAT_FREQ = re.compile(r"^\s*(\d+)\s*,.*,\s*(\d+(\.\d*)?)\s*$")
 
 
 def convert_dat(lines, plan):
-    if len(lines) != 16:
-        raise ConvError(".dat が %d 行（16 行のはず）" % len(lines))
-    out = []
+    """入力の形によらず、決まった書式（config の dat_switch）で 16 行を書く。
+
+    A15・A16 などの使う Array は 2nd LO を書く。それ以外の行は、入力の同じ番号の行に
+    2nd LO があればそれを残し、なければ周波数を書かない。`#` の行は周波数を書かない。
+    戻り値は (書き出す行, 注意のメッセージのリスト)。
+    """
+    notes = []
+    kept = {}
     for i, l in enumerate(lines):
-        m = DAT_LINE.match(l)
-        if not m or int(m.group(1)) != i + 1:
-            raise ConvError(".dat %d 行目: 知らない形: %s" % (i + 1, l))
-        name, sb = plan.dat_switch[i]
-        freq = m.group(4)
-        if (i + 1) in plan.arrays:
-            freq = "%.3f" % (plan.lo2 / 1e6)
+        m = DAT_FREQ.match(l)
+        if m and 1 <= int(m.group(1)) <= 16:
+            kept[int(m.group(1))] = "%.3f" % float(m.group(2))
+        elif l.strip() and not re.match(r"^\s*\d+\s*,", l):
+            notes.append(".dat の入力 %d 行目は読み取れない形。無視して書式どおりに書く: %s" % (i + 1, l))
+    out = []
+    for n in range(1, 17):
+        name, sb = plan.dat_switch[n - 1]
         if name.startswith("#"):  # 使わない行は周波数を書かない
-            out.append("%s,%-6s," % (m.group(1), name))
+            out.append("%02d,%-6s," % (n, name))
+            continue
+        if n in plan.arrays:
+            freq = "%.3f" % (plan.lo2 / 1e6)
         else:
-            out.append("%s,%-6s,%-3s,%s" % (m.group(1), name, sb, freq))
-    return out
+            freq = kept.get(n, "")
+        out.append("%02d,%-6s,%-3s,%s" % (n, name, sb, freq))
+    return out, notes
 
 
 # ---------------------------------------------------------------- ファイル
@@ -400,7 +410,7 @@ def load_config(path):
         return native(json.loads(f.read().decode("utf-8")))
 
 
-def read_lines(path):
+def read_lines(path, strict=True):
     with open(path, "rb") as f:
         data = f.read()
     try:
@@ -409,6 +419,8 @@ def read_lines(path):
         raise ConvError("%s: ASCII 以外の文字がある" % path)
     if PY2:
         text = data
+    if not strict:  # .dat は形によらず書き直すので、改行の違いは気にしない
+        return text.replace("\r\n", "\n").rstrip("\n").split("\n") if text.strip() else []
     if "\r" in text:
         raise ConvError("%s: 改行が LF ではない" % path)
     if not text.endswith("\n"):
@@ -433,11 +445,16 @@ def check_not_converted(lines, plan):
 
 
 def show_diff(name, a, b):
+    n = max(len(a), len(b))
+    a = a + [None] * (n - len(a))
+    b = b + [None] * (n - len(b))
     changed = [(i, x, y) for i, (x, y) in enumerate(zip(a, b)) if x != y]
     print("==== %s: %d 行を書き換え" % (name, len(changed)))
     for i, x, y in changed:
-        print("%5d - %s" % (i + 1, x))
-        print("%5d + %s" % (i + 1, y))
+        if x is not None:
+            print("%5d - %s" % (i + 1, x))
+        if y is not None:
+            print("%5d + %s" % (i + 1, y))
 
 
 def main(argv=None):
@@ -465,10 +482,10 @@ def main(argv=None):
             raise ConvError("%s.dat がない" % stem)
 
         start_in = read_lines(os.path.join(indir, stem + ".start"))
-        dat_in = read_lines(os.path.join(indir, stem + ".dat"))
+        dat_in = read_lines(os.path.join(indir, stem + ".dat"), strict=False)
         check_not_converted(start_in, plan)
         start_out = convert_start(start_in, plan)
-        dat_out = convert_dat(dat_in, plan)
+        dat_out, dat_notes = convert_dat(dat_in, plan)
 
         if not os.path.isdir(outdir):
             os.makedirs(outdir)
@@ -480,6 +497,8 @@ def main(argv=None):
     print()
     show_diff(stem + ".start", start_in, start_out)
     show_diff(stem + ".dat", dat_in, dat_out)
+    for x in dat_notes:
+        print("注意: %s" % x)
     print()
     for x in files:
         dst = os.path.join(outdir, x)

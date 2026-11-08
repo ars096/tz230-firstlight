@@ -119,12 +119,28 @@ class TestConvert(unittest.TestCase):
             c.Plan(cfg)
 
     def test_dat(self):
-        out = c.convert_dat(c.read_lines(SAMPLE_DAT), self.plan)
+        out, notes = c.convert_dat(c.read_lines(SAMPLE_DAT), self.plan)
+        self.assertEqual(notes, [])
         self.assertEqual(out[14], "15,TZ2H  ,LSB,10000.000")
         self.assertEqual(out[15], "16,TZ2H  ,LSB,10000.000")
         self.assertEqual(out[0], "01,H20ch1,USB,9122.000")
         self.assertEqual(out[8], "09,H40   ,USB,8821.000")
         self.assertEqual(out[4], "05,#     ,")
+
+    def test_dat_any_input(self):
+        """入力の形によらず、決まった書式で 16 行を書く（実機の nobs は `01,#     ,,` のような行も出す）。"""
+        src = ["01,#     ,,", "02,H40   ,USB,9122.000", "junk", "15,#     ,,"]
+        out, notes = c.convert_dat(src, self.plan)
+        self.assertEqual(len(out), 16)
+        self.assertEqual(out[0], "01,H20ch1,USB,")
+        self.assertEqual(out[1], "02,H20ch1,USB,9122.000")
+        self.assertEqual(out[2], "03,H20ch2,USB,")
+        self.assertEqual(out[4], "05,#     ,")
+        self.assertEqual(out[14], "15,TZ2H  ,LSB,10000.000")
+        self.assertEqual(out[15], "16,TZ2H  ,LSB,10000.000")
+        self.assertEqual(len(notes), 1)
+        out2, _ = c.convert_dat([], self.plan)
+        self.assertEqual(out2[14], "15,TZ2H  ,LSB,10000.000")
 
     def test_start_chan_multiple_of_64(self):
         self.assertEqual(self.plan.start_chan % 64, 0)
