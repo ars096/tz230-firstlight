@@ -420,14 +420,14 @@ def convert_dat(plan):
     """決まった書式（config の dat_switch）で 16 行を書く。入力の .dat の中身は使わない。
 
     使う Array（設定の arrays）はそれぞれの 2nd LO を書く。使わない行も 2nd LO が要るので、
-    いちばん番号の小さい使う Array（今は A11）と同じ値を入れる。`#` の行は周波数を書かない。
+    いちばん番号の小さい使う Array（今は A11）と同じ値を入れる。`#` の行は周波数を書かず、`05,#     ,,` とする。
     """
     fill = plan.arrays[min(plan.arrays)]["lo2"]
     out = []
     for n in range(1, 17):
         name, sb = plan.dat_switch[n - 1]
         if name.startswith("#"):
-            out.append("%02d,%-6s," % (n, name))
+            out.append("%02d,%-6s,," % (n, name))  # カンマ 3 つ（実機の nobs も `01,#     ,,` と出す）
             continue
         lo2 = plan.arrays[n]["lo2"] if n in plan.arrays else fill
         out.append("%02d,%-6s,%-3s,%.3f" % (n, name, sb, lo2 / 1e6))
