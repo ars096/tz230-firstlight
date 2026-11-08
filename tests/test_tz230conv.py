@@ -88,14 +88,29 @@ class TestConvert(unittest.TestCase):
         self.assertEqual(sam45_list(out, "RX_NAME")[14:16], ["TZ2H", "TZ2H"])
         self.assertEqual(sam45_list(out, "SIDBD_TYP")[14:16], ["USB", "LSB"])
         self.assertEqual(sam45_list(out, "REST_FREQ")[14:16], ["2.30538E11", "2.1559595E11"])
-        for par in ("START_CHAN_SUB1", "END_CHAN_SUB1", "CHAN_AVG_SUB1", "OBS_BAND"):  # 窓は入力のまま
+        for par in ("START_CHAN_SUB1", "END_CHAN_SUB1", "CHAN_AVG_SUB1"):  # 窓は入力のまま
             self.assertEqual(sam45_list(out, par), sam45_list(self.src, par), par)
+        self.assertEqual(sam45_list(out, "OBS_BAND")[14:16], ["1.25E8", "1.25E8"])
         for n, a in self.plan.arrays.items():  # 線は 2nd IF 3 GHz（2nd LO の 1 kHz の丸めの分だけずれる）
             self.assertAlmostEqual(a["f2_line"], 3.0e9, delta=1e3)
-        # A01〜A14 は元のまま
-        for par in ("REST_FREQ", "OBS_FREQ", "FREQ_IF1", "RX_NAME", "SIDBD_TYP", "OBS_BAND", "FQDAT_F0"):
-            self.assertEqual(sam45_list(out, par)[:14], sam45_list(self.src, par)[:14], par)
-        self.assertEqual(sam45_list(out, "FQDAT_FQ")[:28], sam45_list(self.src, "FQDAT_FQ")[:28])
+        # A15・A16 以外はデフォルト値（文字列は空、小数は 0.0、整数は 0）
+        self.assertEqual(sam45_list(out, "RX_NAME"), [""] * 14 + ["TZ2H", "TZ2H"] + [""] * 16)
+        self.assertEqual(sam45_list(out, "REST_FREQ"), ["0.0"] * 14 + ["2.30538E11", "2.1559595E11"] + ["0.0"] * 16)
+        self.assertEqual(sam45_list(out, "ARRAY"), ["0"] * 14 + ["1", "1"] + ["0"] * 16)
+        self.assertEqual(sam45_list(out, "IFATT"), ["0"] * 14 + ["5", "5"] + ["0"] * 16)
+        self.assertEqual(sam45_list(out, "FQDAT_CH"), ["0"] * 28 + ["4096", "1", "4096", "1"] + ["0"] * 32)
+        self.assertEqual(sam45_list(out, "FQDAT_FQ")[28:30], ["2.3047552E11", "2.3060048E11"])
+        for l in out:
+            m = re.match(r"SET SAM45 (\S+) (.*)$", l)
+            if not m or "," not in m.group(2):
+                continue
+            items = c.parse_list(m.group(2))[0]
+            per = len(items) // 32
+            if len(items) in (32, 64):
+                others = [x for j, x in enumerate(items) if j // per + 1 not in (15, 16)]
+                self.assertTrue(all(x in ("", "0", "0.0") for x in others), l)
+            else:  # SpW・サブアレイごとのものは元のまま
+                self.assertIn(l, self.src)
 
     def test_lines_inside_window(self):
         for n, a in self.plan.arrays.items():

@@ -253,11 +253,16 @@ def convert_start(lines, plan):
         new = handle_set(devkey, par, val, plan, i)
         if new is not None:
             mark((devkey, par), i)
-            out[i] = "SET %s %s %s" % (dev, par, new)
         elif (devkey, par) in PASS:
             pass
         elif SUSPECT.search(par) or BIG_NUMBER.search(val):
             raise ConvError("%d 行目: 周波数に関係しそうな知らない欄: %s" % (i + 1, l))
+        if dev == "SAM45":
+            r = reset_other_arrays(new if new is not None else val, plan, i, par)
+            if r is not None:
+                new = r
+        if new is not None and new != val:
+            out[i] = "SET %s %s %s" % (dev, par, new)
 
     if in_mlpps:
         raise ConvError("MLPPS のブロックが CLOSE で閉じていない")
@@ -279,6 +284,34 @@ REQUIRED = [
     ("SAM45", "START_CHAN_SUB1"), ("SAM45", "END_CHAN_SUB1"), ("SAM45", "CHAN_AVG_SUB1"),
     ("SAM45", "N_SPEC_WINDOW_SUB1"), ("SAM45", "SUB_ARRAY"), ("SAM45", "QL_RMSARY"),
 ]
+
+
+def reset_other_arrays(val, plan, i, par):
+    """SAM45 の Array ごとのリストで、使う Array（A15・A16）以外をデフォルト値にする。
+
+    要素が 32 個なら A01〜A32 に 1 つずつ、64 個なら 2 つずつ（FQDAT_FQ・FQDAT_CH・CH_RANGE）。
+    2 個以下は Array ごとではない（SpW・サブアレイごと、天体の位置など）ので変えない。
+    デフォルト値は、文字列のリストなら空、数のリストは小数点か指数があれば 0.0、なければ 0。
+    """
+    v = val.strip()
+    if not (v.startswith("(") or v.startswith("'")) or "," not in v:
+        return None
+    items, kind = parse_list(v)
+    if len(items) <= 2:
+        return None
+    if len(items) not in (N_ARRAY, 2 * N_ARRAY):
+        raise ConvError("%d 行目: SAM45 %s の要素が %d 個（Array ごとなら 32 か 64 のはず）" % (i + 1, par, len(items)))
+    if kind == "''":
+        default = ""
+    elif any(re.search(r"[.eE]", x) for x in items):
+        default = "0.0"
+    else:
+        default = "0"
+    per = len(items) // N_ARRAY
+    for j in range(len(items)):
+        if j // per + 1 not in plan.arrays:
+            items[j] = default
+    return join_list(items, kind)
 
 
 def per_array(val, n_expect, set_fn, i, par):
