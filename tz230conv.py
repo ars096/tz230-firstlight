@@ -41,7 +41,7 @@ N_ARRAY = 32
 
 # 共通 IF 系の 2nd LO の設定範囲
 LO2_MIN = 8.0e9
-LO2_MAX = 10.0e9
+LO2_MAX = 12.0e9  # 12 GHz くらいまで大丈夫かもしれない（2026-11-09 時点で未確認）
 
 START_CHAN_STEP = 64  # START_CHAN は 16 か 64 の倍数のはず。念のため 64 の倍数に限る
 
@@ -96,7 +96,8 @@ def join_list(items, kind):
 class Plan:
     """設定から、書き込む値をすべて計算しておく。"""
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, input_window=None):
+        """input_window: 入力の .start の窓 (START_CHAN, END_CHAN, CHAN_AVG)。設定の window が null のときに使う。"""
         s = cfg["synthe"]
         self.synthe = s["name"]
         self.synthe_rx = s["rx_name"]
@@ -110,15 +111,19 @@ class Plan:
         else:
             raise ConvError("synthe.sideband は USB か LSB: %r" % self.synthe_sb)
 
-        self.lo2 = float(cfg["lo2_mhz"]) * 1e6
-        if not LO2_MIN <= self.lo2 <= LO2_MAX:
-            raise ConvError("2nd LO %.3f MHz が設定範囲 %.0f–%.0f MHz の外"
-                            % (self.lo2 / 1e6, LO2_MIN / 1e6, LO2_MAX / 1e6))
+        # 線を 2nd IF のこの周波数に置くよう、Array ごとに 2nd LO を決める
+        self.line_f2 = float(cfg["line_f2"])
 
-        w = cfg["window"]
-        self.start_chan = int(w["start_chan"])
-        self.end_chan = int(w["end_chan"])
-        self.chan_avg = int(w["chan_avg"])
+        w = cfg.get("window")
+        self.keep_window = w is None
+        if self.keep_window:
+            if input_window is None:
+                raise ConvError("窓を変えない設定なのに、入力の窓がわからない")
+            self.start_chan, self.end_chan, self.chan_avg = input_window
+        else:
+            self.start_chan = int(w["start_chan"])
+            self.end_chan = int(w["end_chan"])
+            self.chan_avg = int(w["chan_avg"])
         if self.end_chan - self.start_chan + 1 != SAM45_NCH * self.chan_avg:
             raise ConvError("窓 %d–%d を %d ずつ束ねても %d ch にならない"
                             % (self.start_chan, self.end_chan, self.chan_avg, SAM45_NCH))
@@ -142,7 +147,12 @@ class Plan:
             if1_line = rest - self.lo1 if sb == "USB" else self.lo1 - rest
             if if1_line <= 0:
                 raise ConvError("A%02d: %s で静止周波数 %s が 1st LO の反対側" % (n, sb, rest))
-            f2_line = self.lo2 - if1_line
+            lo2 = if1_line + self.line_f2
+            lo2 = math.floor(lo2 / 1e3 + 0.5) * 1e3  # .dat は MHz で小数 3 桁（1 kHz）まで
+            if not LO2_MIN <= lo2 <= LO2_MAX:
+                raise ConvError("A%02d: 2nd LO %.3f MHz が設定範囲 %.0f–%.0f MHz の外"
+                                % (n, lo2 / 1e6, LO2_MIN / 1e6, LO2_MAX / 1e6))
+            f2_line = lo2 - if1_line
             lo, hi = self.f2(0.5), self.f2(SAM45_NCH + 0.5)
             if not lo < f2_line < hi:
                 raise ConvError("A%02d: 線が 2nd IF %.4f GHz で、窓 %.4f–%.4f GHz の外"
@@ -154,31 +164,31 @@ class Plan:
                 "label": a.get("label", ""),
                 "rest": rest, "sb": sb, "rx": a["rx_name"],
                 "obs": obs, "if1": if1,
-                "if1_line": if1_line, "f2_line": f2_line,
-                "fq4096": self.rf(sb, SAM45_NCH), "fq1": self.rf(sb, 1),
+                "if1_line": if1_line, "f2_line": f2_line, "lo2": lo2,
+                "fq4096": self.rf(sb, lo2, SAM45_NCH), "fq1": self.rf(sb, lo2, 1),
             }
 
     def f2(self, k):
         """束ねたあとの ch k（1 始まり、端は 0.5 刻み）の中心の 2nd IF。"""
         return SAM45_F2_MIN + (self.start_chan + (k - 0.5) * self.chan_avg) * SAM45_DF
 
-    def rf(self, sb, k):
+    def rf(self, sb, lo2, k):
         """ch k の RF（静止系、ドップラー補正なし）。2nd LO は 1st IF の上なので 2nd IF で反転する。"""
-        if1 = self.lo2 - self.f2(k)
+        if1 = lo2 - self.f2(k)
         f = self.lo1 + if1 if sb == "USB" else self.lo1 - if1
         return math.floor(f / FQDAT_ROUND + 0.5) * FQDAT_ROUND  # 四捨五入（round は 2 と 3 で違う）
 
     def summary(self):
         out = ["1st LO %.6f GHz（%s %s の OBS_FREQ %.6f − FREQ_IF1 %.6f、ドップラー補正の前）"
                % (self.lo1 / 1e9, self.synthe, self.synthe_sb, self.obs_freq / 1e9, self.freq_if1 / 1e9),
-               "2nd LO %.3f MHz" % (self.lo2 / 1e6),
-               "窓 %d–%d、%d ずつ束ねる → 2nd IF %.4f–%.4f GHz（%.1f MHz、%.2f kHz/ch）"
-               % (self.start_chan, self.end_chan, self.chan_avg, self.f2(0.5) / 1e9,
+               "窓（%s）%d–%d、%d ずつ束ねる → 2nd IF %.4f–%.4f GHz（%.1f MHz、%.2f kHz/ch）"
+               % ("入力のまま" if self.keep_window else "書き換え", self.start_chan, self.end_chan, self.chan_avg, self.f2(0.5) / 1e9,
                   self.f2(SAM45_NCH + 0.5) / 1e9, self.obs_band / 1e6, self.chan_avg * SAM45_DF / 1e3)]
         for n, a in sorted(self.arrays.items()):
-            out.append("A%02d %s %s %.6f GHz: 1st IF %.4f GHz → 2nd IF %.4f GHz、ch 1 = %.5f GHz、ch 4096 = %.5f GHz"
-                       % (n, a["sb"], a["label"], a["rest"] / 1e9, a["if1_line"] / 1e9, a["f2_line"] / 1e9,
-                          a["fq1"] / 1e9, a["fq4096"] / 1e9))
+            out.append("A%02d %s %s %.6f GHz: 1st IF %.6f GHz、2nd LO %.3f MHz → 2nd IF %.6f GHz、"
+                       "ch 1 = %.5f GHz、ch 4096 = %.5f GHz"
+                       % (n, a["sb"], a["label"], a["rest"] / 1e9, a["if1_line"] / 1e9, a["lo2"] / 1e6,
+                          a["f2_line"] / 1e9, a["fq1"] / 1e9, a["fq4096"] / 1e9))
         return "\n".join(out)
 
 
@@ -385,7 +395,7 @@ def convert_dat(lines, plan):
             out.append("%02d,%-6s," % (n, name))
             continue
         if n in plan.arrays:
-            freq = "%.3f" % (plan.lo2 / 1e6)
+            freq = "%.3f" % (plan.arrays[n]["lo2"] / 1e6)
         else:
             freq = kept.get(n, "")
         out.append("%02d,%-6s,%-3s,%s" % (n, name, sb, freq))
@@ -437,6 +447,19 @@ def write_lines(path, lines):
     os.rename(tmp, path)
 
 
+def read_window(lines):
+    """入力の .start から SAM45 の窓 (START_CHAN, END_CHAN, CHAN_AVG) を読む（SpW 1 つ目）。"""
+    got = {}
+    for l in lines:
+        m = re.match(r"SET SAM45 (START_CHAN_SUB1|END_CHAN_SUB1|CHAN_AVG_SUB1) (.*)$", l)
+        if m:
+            got[m.group(1)] = int(parse_list(m.group(2))[0][0])
+    try:
+        return got["START_CHAN_SUB1"], got["END_CHAN_SUB1"], got["CHAN_AVG_SUB1"]
+    except KeyError as e:
+        raise ConvError("入力の .start に SAM45 %s がない" % e)
+
+
 def check_not_converted(lines, plan):
     """上書きが既定なので、変換済みの指示書をもう一度変換しないようにする。"""
     for i, l in enumerate(lines):
@@ -474,8 +497,6 @@ def main(argv=None):
         stem = os.path.basename(start)[:-len(".start")]
         outdir = os.path.abspath(args.outdir) if args.outdir else indir
 
-        plan = Plan(load_config(args.config))
-
         files = sorted(x for x in os.listdir(indir)
                        if x.startswith(stem + ".") and "." not in x[len(stem) + 1:])
         if stem + ".dat" not in files:
@@ -483,6 +504,7 @@ def main(argv=None):
 
         start_in = read_lines(os.path.join(indir, stem + ".start"))
         dat_in = read_lines(os.path.join(indir, stem + ".dat"), strict=False)
+        plan = Plan(load_config(args.config), read_window(start_in))
         check_not_converted(start_in, plan)
         start_out = convert_start(start_in, plan)
         dat_out, dat_notes = convert_dat(dat_in, plan)

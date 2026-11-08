@@ -51,8 +51,8 @@ nobs が出す `.start` と `.dat` のうち、周波数に関係する欄の一
 | `SET SAM45 FQDAT_F0` | Array ごとの周波数ラベルの基準（= 静止周波数、32） | 変える |
 | `SET SAM45 FQDAT_FQ` | Array ごとに ch 4096 と ch 1 の RF（64） | 変える（計算し直す） |
 | `SET SAM45 FQDAT_CH` | `FQDAT_FQ` に対応する ch（4096, 1 の組、64） | 変えない |
-| `SET SAM45 OBS_BAND` | Array ごとの帯域（125 MHz） | 変える（窓の幅） |
-| `SET SAM45 START_CHAN_SUB1`・`END_CHAN_SUB1`・`CHAN_AVG_SUB1` | 窓（サブアレイ 1、SpW 2 つ分） | 変える |
+| `SET SAM45 OBS_BAND` | Array ごとの帯域（125 MHz） | 窓を変えるときだけ変える（窓の幅） |
+| `SET SAM45 START_CHAN_SUB1`・`END_CHAN_SUB1`・`CHAN_AVG_SUB1` | 窓（サブアレイ 1、SpW 2 つ分） | 既定では変えない（設定の `window`） |
 | `SET SAM45 QL_RMSARY` | QL で RMS を見る Array | 変える |
 
 RF 周波数ラベルとは、`REST_FREQ`・`FQDAT_F0`・`FQDAT_FQ` のことと考えている。

@@ -18,6 +18,7 @@ SAMPLE = os.path.join(ROOT, "samples", "h40-ori-kl", "ori-kl.start")
 SAMPLE_DAT = os.path.join(ROOT, "samples", "h40-ori-kl", "ori-kl.dat")
 
 CFG = c.load_config(c.DEFAULT_CONFIG)
+WINDOW = c.read_window(c.read_lines(SAMPLE))  # (245760, 278527, 8)
 
 
 def sam45_list(lines, par):
@@ -31,23 +32,21 @@ def sam45_list(lines, par):
 class TestFormulasOnH40Sample(unittest.TestCase):
     """H40 の設定を入れると、サンプルの FQDAT_FQ と 2nd LO が再現できる。"""
 
-    def h40_plan(self, lo2_mhz, array, rest):
+    def h40_plan(self, array, rest):
         cfg = copy.deepcopy(CFG)
         cfg["synthe"].update(obs_freq=43.0e9, freq_if1=6.0e9, sideband="USB")
-        cfg["lo2_mhz"] = lo2_mhz
-        cfg["window"] = {"start_chan": 245760, "end_chan": 278527, "chan_avg": 8}
         cfg["arrays"] = {str(array): {"rest_freq": rest, "sideband": "USB", "rx_name": "H40"}}
-        return c.Plan(cfg)
+        return c.Plan(cfg, WINDOW)
 
     def test_fqdat_and_lo2(self):
         lines = c.read_lines(SAMPLE)
         fq = sam45_list(lines, "FQDAT_FQ")
         dat = c.read_lines(SAMPLE_DAT)
         for array, rest in ((1, 43.122e9), (9, 42.821e9)):
-            lo2_mhz = float(dat[array - 1].split(",")[3])
-            p = self.h40_plan(lo2_mhz, array, rest)
+            p = self.h40_plan(array, rest)
             a = p.arrays[array]
-            self.assertAlmostEqual(a["f2_line"], 3.0e9, delta=1)  # 線は 2nd IF の 3 GHz
+            self.assertEqual("%.3f" % (a["lo2"] / 1e6), dat[array - 1].split(",")[3])  # 線を 2nd IF 3 GHz に置く 2nd LO
+            self.assertAlmostEqual(a["f2_line"], 3.0e9, delta=1)
             self.assertEqual(c.jfmt(a["fq4096"]), fq[2 * (array - 1)])
             self.assertEqual(c.jfmt(a["fq1"]), fq[2 * (array - 1) + 1])
             self.assertAlmostEqual(p.obs_band, 1.25e8)
@@ -62,7 +61,7 @@ class TestJfmt(unittest.TestCase):
 
 class TestConvert(unittest.TestCase):
     def setUp(self):
-        self.plan = c.Plan(CFG)
+        self.plan = c.Plan(CFG, WINDOW)
         self.src = c.read_lines(SAMPLE)
         self.out = c.convert_start(self.src, self.plan)
 
@@ -89,6 +88,10 @@ class TestConvert(unittest.TestCase):
         self.assertEqual(sam45_list(out, "RX_NAME")[14:16], ["TZ2H", "TZ2H"])
         self.assertEqual(sam45_list(out, "SIDBD_TYP")[14:16], ["USB", "LSB"])
         self.assertEqual(sam45_list(out, "REST_FREQ")[14:16], ["2.30538E11", "2.1559595E11"])
+        for par in ("START_CHAN_SUB1", "END_CHAN_SUB1", "CHAN_AVG_SUB1", "OBS_BAND"):  # 窓は入力のまま
+            self.assertEqual(sam45_list(out, par), sam45_list(self.src, par), par)
+        for n, a in self.plan.arrays.items():  # 線は 2nd IF 3 GHz（2nd LO の 1 kHz の丸めの分だけずれる）
+            self.assertAlmostEqual(a["f2_line"], 3.0e9, delta=1e3)
         # A01〜A14 は元のまま
         for par in ("REST_FREQ", "OBS_FREQ", "FREQ_IF1", "RX_NAME", "SIDBD_TYP", "OBS_BAND", "FQDAT_F0"):
             self.assertEqual(sam45_list(out, par)[:14], sam45_list(self.src, par)[:14], par)
@@ -108,21 +111,21 @@ class TestConvert(unittest.TestCase):
 
     def test_lo2_range(self):
         cfg = copy.deepcopy(CFG)
-        cfg["lo2_mhz"] = 10338.0
+        cfg["synthe"]["freq_if1"] = 9.5e9  # CO の 1st IF 9.5 GHz → 2nd LO 12.5 GHz
         with self.assertRaises(c.ConvError):
-            c.Plan(cfg)
+            c.Plan(cfg, WINDOW)
 
     def test_line_outside_window(self):
         cfg = copy.deepcopy(CFG)
-        cfg["window"] = {"start_chan": 245760, "end_chan": 278527, "chan_avg": 8}
+        cfg["window"] = {"start_chan": 65536, "end_chan": 196607, "chan_avg": 32}  # 2.25–2.75 GHz
         with self.assertRaises(c.ConvError):
-            c.Plan(cfg)
+            c.Plan(cfg, WINDOW)
 
     def test_dat(self):
         out, notes = c.convert_dat(c.read_lines(SAMPLE_DAT), self.plan)
         self.assertEqual(notes, [])
-        self.assertEqual(out[14], "15,TZ2H  ,LSB,10000.000")
-        self.assertEqual(out[15], "16,TZ2H  ,LSB,10000.000")
+        self.assertEqual(out[14], "15,TZ2H  ,LSB,10338.000")
+        self.assertEqual(out[15], "16,TZ2H  ,LSB,10604.050")
         self.assertEqual(out[0], "01,H20ch1,USB,9122.000")
         self.assertEqual(out[8], "09,H40   ,USB,8821.000")
         self.assertEqual(out[4], "05,#     ,")
@@ -136,18 +139,18 @@ class TestConvert(unittest.TestCase):
         self.assertEqual(out[1], "02,H20ch1,USB,9122.000")
         self.assertEqual(out[2], "03,H20ch2,USB,")
         self.assertEqual(out[4], "05,#     ,")
-        self.assertEqual(out[14], "15,TZ2H  ,LSB,10000.000")
-        self.assertEqual(out[15], "16,TZ2H  ,LSB,10000.000")
+        self.assertEqual(out[14], "15,TZ2H  ,LSB,10338.000")
+        self.assertEqual(out[15], "16,TZ2H  ,LSB,10604.050")
         self.assertEqual(len(notes), 1)
         out2, _ = c.convert_dat([], self.plan)
-        self.assertEqual(out2[14], "15,TZ2H  ,LSB,10000.000")
+        self.assertEqual(out2[14], "15,TZ2H  ,LSB,10338.000")
 
     def test_start_chan_multiple_of_64(self):
         self.assertEqual(self.plan.start_chan % 64, 0)
         cfg = copy.deepcopy(CFG)
-        cfg["window"] = {"start_chan": 65536 + 32, "end_chan": 196607 + 32, "chan_avg": 32}
+        cfg["window"] = {"start_chan": 245760 + 32, "end_chan": 278527 + 32, "chan_avg": 8}
         with self.assertRaises(c.ConvError):
-            c.Plan(cfg)
+            c.Plan(cfg, WINDOW)
 
 
 class TestMain(unittest.TestCase):
@@ -168,7 +171,7 @@ class TestMain(unittest.TestCase):
         self.assertEqual(c.main([start]), 0)
         self.assertEqual(sorted(os.listdir(src)), ["ori-kl.dat", "ori-kl.foo", "ori-kl.start"])
         out = c.read_lines(start)
-        self.assertEqual(out, c.convert_start(c.read_lines(SAMPLE), c.Plan(CFG)))
+        self.assertEqual(out, c.convert_start(c.read_lines(SAMPLE), c.Plan(CFG, WINDOW)))
         self.assertEqual(c.main([start]), 1)  # 変換済みはもう一度変換しない
         self.assertEqual(c.read_lines(start), out)
 

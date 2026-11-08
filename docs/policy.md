@@ -65,16 +65,19 @@ RF (OBS_FREQ) --1st LO--> 1st IF (FREQ_IF1) --2nd LO (.dat, MHz)--> 2nd IF 2–4
 - 230 GHz モードは **DSB**。IF は既存の TZ2H のポートを流用し、SAM45 の **A15・A16** に入る。
 - 1st LO は 223.2 GHz。A15 を USB で CO(2–1)（230.538 GHz）、A16 を LSB で SiO v=1 (5–4)（215.59595 GHz）にする。
   1st IF は CO 7.338 GHz、SiO 7.604 GHz。
-- 共通 IF 系は 1st IF 4–8 GHz を 2nd IF 2–4 GHz に落とす。2nd LO は 8–10 GHz の範囲で設定できる。
-  1st IF 6–8 GHz を通すよう、A15・A16 の 2nd LO は **10000 MHz**。線は 2nd IF で CO 2.662 GHz、SiO 2.396 GHz に来る。
-- そのため **SAM45 の窓は変えてよい**ことにした（2026-11-09）。A15 と A16 は同じ窓を使うので、両方の線が入る
-  2nd IF 2.25–2.75 GHz（`START_CHAN` 65536〜`END_CHAN` 196607、`CHAN_AVG` 32、500 MHz、122 kHz/ch）にする。
+- 共通 IF 系は 1st IF 4–8 GHz を 2nd IF 2–4 GHz に落とす。2nd LO は 8–10 GHz と聞いていたが、
+  **12 GHz くらいまで大丈夫かもしれない**（2026-11-09、未確認）ので、スクリプトは 8–12 GHz を許す。
+- **線が 2nd IF 3 GHz に来るよう、2nd LO を Array ごとに決める**（2026-11-09）。2nd LO = 1st IF(線) + 3 GHz で、
+  1 kHz（.dat の MHz 小数 3 桁）に丸める。A15 は 10338.000 MHz、A16 は 10604.050 MHz。
+- 線が 3 GHz に来るので、**SAM45 の窓は nobs が出したまま変えない**（設定の `window` が `null`）。
+  H40 のサンプルでは 2.9375–3.0625 GHz（125 MHz、30.5 kHz/ch）で、230 GHz では ±約 81 km/s にあたる。
+  （いったん 2nd LO 10000 MHz・窓 2.25–2.75 GHz にしたが、上の方針に置き換えた。窓を変えたいときは設定の `window` に書く。）
 - `SYNTHE_N` は CO を基準にする（`OBS_FREQ` 230.538 GHz、`FREQ_IF1` 7.338 GHz、USB）。DSB なので LSB の SiO は
   ドップラー追尾が少しずれる（v = 30 km/s で約 1.5 MHz）が、ファーストライトでは許容する。
 - A01〜A14 の SAM45 の設定（周波数ラベル・有効フラグなど）は H40 の値のまま残す。`QL_RMSARY` は `A15`。
 - `.dat` は受信機名とサイドバンドの組み合わせでスイッチを制御しており、周波数の計算には使わない。
   A15・A16 も `TZ2H,LSB`。A15・A16 以外の 2nd LO は元の値を残す。`#` の行は周波数を書かず `05,#     ,` とする。
-- SAM45 の `START_CHAN` は 16 か 64 の倍数のはずなので、念のため 64 の倍数に限る（65536 = 64 × 1024）。
+- SAM45 の `START_CHAN` は 16 か 64 の倍数のはずなので、念のため 64 の倍数に限る（サンプルの 245760 = 64 × 3840）。
 - `.start` の書き換え:
   - SG は 1 つだけ使う。`SYNTHE_K` を **`SYNTHE_N`** にし、`SET SYNTHE_N RX_NAME 'TZ230DSB'`。
   - `SET ANT POINTING 'TZ2'`。

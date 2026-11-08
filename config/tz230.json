@@ -1,5 +1,5 @@
 {
-  "_comment": "TZ 230 GHz モード（DSB）、1st LO 223.2 GHz。A15 = USB CO(2-1)、A16 = LSB SiO v=1 (5-4)。docs/policy.md を参照。",
+  "_comment": "TZ 230 GHz モード（DSB）、1st LO 223.2 GHz。A15 = USB CO(2-1)、A16 = LSB SiO v=1 (5-4)。線が 2nd IF 3 GHz に来るよう Array ごとに 2nd LO を決める。window が null なら SAM45 の窓は入力のまま。docs/policy.md を参照。",
   "synthe": {
     "name": "SYNTHE_N",
     "rx_name": "TZ230DSB",
@@ -7,12 +7,8 @@
     "freq_if1": 7.338e9,
     "sideband": "USB"
   },
-  "lo2_mhz": 10000.0,
-  "window": {
-    "start_chan": 65536,
-    "end_chan": 196607,
-    "chan_avg": 32
-  },
+  "line_f2": 3.0e9,
+  "window": null,
   "arrays": {
     "15": {"label": "12CO(2-1)", "rest_freq": 230.538e9, "sideband": "USB", "rx_name": "TZ2H"},
     "16": {"label": "SiO v=1 (5-4)", "rest_freq": 215.59595e9, "sideband": "LSB", "rx_name": "TZ2H"}
