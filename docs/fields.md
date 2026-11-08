@@ -36,7 +36,7 @@ nobs が出す `.start` と `.dat` のうち、周波数に関係する欄の一
 | `SEND MLPPS '/usr/bin/python /cosmos3/45m/nro/bin/losw_h40.py'` | 受信機ごとの LO スイッチの切り替え | 決定は policy.md |
 | `SET ANT POINTING 'H40'` | ポインティングに使う受信機 | 変えない |
 | `SET SYNTHE_K OBS_FREQ` | 観測する RF | 変える |
-| `SET SYNTHE_K FREQ_IF1` | 1st IF | 変える（230 GHz での値は未決） |
+| `SET SYNTHE_K FREQ_IF1` | 1st IF | 変える |
 | `SET SYNTHE_K SIDBD_TYP` | 1st LO のサイドバンド | 決定は policy.md |
 | `SET SYNTHE_K RX_NAME` | 受信機名 | 決定は policy.md |
 | `SET RXT SETUP_FILE 'ori-kl.dat'` | `.dat` のファイル名 | 変えない（ファイル名を揃えるため） |
@@ -65,6 +65,10 @@ RF 周波数ラベルとは、`REST_FREQ`・`FQDAT_F0`・`FQDAT_FQ` のことと
 ```
 
 Array 番号、共通 IF 系のスイッチ（受信機名）、サイドバンド、2nd LO（MHz）の 4 欄。16 行（A01〜A16）。
+
+- スイッチは受信機名とサイドバンドの組み合わせで制御している。周波数の計算には使わない。
+- 使わない行にも 2nd LO が要る（変換スクリプトは、使う Array のうち番号がいちばん小さいものと同じ値を入れる）。
+- 使わない行は `05,#     ,,`（カンマ 3 つ、周波数なし）。実機の nobs も `01,#     ,,` のような行を出す。
 
 ## 欄どうしの関係（サンプルで検算済み）
 
