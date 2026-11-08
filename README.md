@@ -9,19 +9,21 @@ nobs で作った H40 の観測指示書（`.start`・`.dat`）を、230 GHz 用
 ## 使い方
 
 ```
-python3 tz230conv.py 指示書のディレクトリ/ori-kl.start 出力先のディレクトリ
+python tz230conv.py /cosmos3/45m/obstable/<ユーザー>/<プロジェクト>/ori-kl.start
 ```
 
-- 出力は元と同じファイル名（`ori-kl.start`・`ori-kl.dat` など）。同じ名前のほかの拡張子のファイルはそのままコピーする。
-- 入力と同じディレクトリには書かない。出力先に同名のファイルがあれば止まる（`--force` で上書き）。
+- 既定では、`ori-kl.start` と `ori-kl.dat` を**その場で上書き**する。元のファイルは nobs ですぐ作り直せるので退避しない。
+- 変換済みのファイルを渡すと止まる（二重に変換しない）。やり直すときは nobs で作り直してから変換する。
+- `-o 出力先のディレクトリ` を付けると、元と同じファイル名でそこに書き、同じ名前のほかの拡張子のファイルもコピーする。
 - 書き換えた行の差分と、1st LO・2nd LO・窓・各 Array の線の位置を表示する。
+- 知らない形の行があったり、2nd LO・窓・`START_CHAN` が範囲の外だったりすると、何も書かずに止まる。
 - 周波数の設定は [`config/tz230.json`](config/tz230.json)。別の設定は `-c` で渡す。
-- Python 3.6 以上の標準ライブラリだけで動く。
+- Python 2.6 以上・Python 3 の標準ライブラリだけで動く（観測所の計算機の `python` は 2 系）。
 
 ## テスト
 
 ```
-python3 -m unittest discover -s tests
+python -m unittest discover -s tests   # Python 2.7 以上・3
 ```
 
 H40 のサンプル（[`samples/h40-ori-kl/`](samples/h40-ori-kl/)、観測者 ID は `obsuser` に置き換えてある）で、

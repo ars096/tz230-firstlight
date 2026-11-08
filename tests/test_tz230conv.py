@@ -1,7 +1,9 @@
-"""python3 -m unittest discover -s tests"""
+# -*- coding: utf-8 -*-
+"""python -m unittest discover -s tests（Python 2.7 以上・3）"""
+
+import shutil
 
 import copy
-import json
 import os
 import re
 import sys
@@ -15,8 +17,7 @@ import tz230conv as c  # noqa: E402
 SAMPLE = os.path.join(ROOT, "samples", "h40-ori-kl", "ori-kl.start")
 SAMPLE_DAT = os.path.join(ROOT, "samples", "h40-ori-kl", "ori-kl.dat")
 
-with open(c.DEFAULT_CONFIG) as f:
-    CFG = json.load(f)
+CFG = c.load_config(c.DEFAULT_CONFIG)
 
 
 def sam45_list(lines, par):
@@ -134,12 +135,31 @@ class TestConvert(unittest.TestCase):
 
 
 class TestMain(unittest.TestCase):
-    def test_same_names_and_no_overwrite(self):
-        with tempfile.TemporaryDirectory() as d:
-            self.assertEqual(c.main([SAMPLE, d]), 0)
-            self.assertEqual(sorted(os.listdir(d)), ["ori-kl.dat", "ori-kl.start"])
-            self.assertEqual(c.main([SAMPLE, d]), 1)  # 上書きしない
-            self.assertEqual(c.main([SAMPLE, os.path.dirname(SAMPLE)]), 1)  # 入力と同じ場所には書かない
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.d)
+
+    def test_overwrite_in_place(self):
+        src = os.path.join(self.d, "in")
+        os.mkdir(src)
+        for x in ("ori-kl.start", "ori-kl.dat"):
+            shutil.copy(os.path.join(os.path.dirname(SAMPLE), x), src)
+        with open(os.path.join(src, "ori-kl.foo"), "w") as f:
+            f.write("x\n")
+        start = os.path.join(src, "ori-kl.start")
+        self.assertEqual(c.main([start]), 0)
+        self.assertEqual(sorted(os.listdir(src)), ["ori-kl.dat", "ori-kl.foo", "ori-kl.start"])
+        out = c.read_lines(start)
+        self.assertEqual(out, c.convert_start(c.read_lines(SAMPLE), c.Plan(CFG)))
+        self.assertEqual(c.main([start]), 1)  # 変換済みはもう一度変換しない
+        self.assertEqual(c.read_lines(start), out)
+
+    def test_outdir(self):
+        self.assertEqual(c.main([SAMPLE, "-o", self.d]), 0)
+        self.assertEqual(sorted(os.listdir(self.d)), ["ori-kl.dat", "ori-kl.start"])
+        self.assertEqual(c.main([SAMPLE, "-o", self.d]), 0)  # 出力先は上書きしてよい
 
 
 if __name__ == "__main__":

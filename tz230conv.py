@@ -1,24 +1,32 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """nobs が出した H40 の指示書（.start・.dat）を TZ 230 GHz モード（DSB）用に書き換える。
 
-    python3 tz230conv.py 入力の.start 出力先ディレクトリ [-c 設定.json] [--force]
+    python tz230conv.py 入力の.start [-o 出力先のディレクトリ] [-c 設定.json]
 
-- 出力は元と同じファイル名で、出力先ディレクトリに書く。同じ名前で拡張子だけ違うほかのファイルはそのままコピーする。
+- 既定では、入力の .start と、同じ名前の .dat をその場で上書きする（元のファイルは nobs ですぐ作り直せる）。
+  変換済みのファイルを渡すと止まる。
+- -o を付けると、元と同じファイル名で出力先に書く。同じ名前で拡張子だけ違うほかのファイルはそのままコピーする。
 - 書き換えるのは決めた行・欄だけ。知らない形の行があれば止まる。
 - 書き換えた行の差分を標準出力に出す。
 
 方針は docs/policy.md、欄の一覧と周波数の式は docs/fields.md。
-Python 3.6 以上の標準ライブラリだけで動く。
+Python 2.6 以上・Python 3 の標準ライブラリだけで動く（観測所の計算機の python は 2 系）。
 """
 
-import argparse
+from __future__ import division, print_function
+
 import decimal
-import difflib
 import json
+import math
+import optparse
 import os
 import re
 import shutil
 import sys
+
+PY2 = sys.version_info[0] == 2
+TEXT = type(u"")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG = os.path.join(HERE, "config", "tz230.json")
@@ -41,12 +49,12 @@ FQDAT_ROUND = 1.0e4  # FQDAT_FQ は 10 kHz に丸める（サンプルで確認�
 
 # 周波数に関係しそうな欄。ここに当たる SET 行は、書き換えるか、下の PASS に入っていないと止まる。
 SUSPECT = re.compile(r"FREQ|SIDBD|RX_NAME|FQDAT|BAND|CHAN|POINTING|SETUP_FILE")
-PASS = {
+PASS = set([
     ("SYNTHE", "FREQ_SW"), ("SYNTHE", "FREQ_INTVAL"),
     ("SAM45", "FREQ_SW"), ("SAM45", "FREQ_INTVAL"), ("SAM45", "FREQ_PROF_SYNTH_SUB1"),
     ("SAM45", "FQDAT_CH"), ("SAM45", "CH_RANGE"), ("SAM45", "CH_BIND"),
     ("RXT", "SETUP_FILE"),  # ファイル名は揃えるので変えない
-}
+])
 BIG_NUMBER = re.compile(r"\d(\.\d*)?E(9|1\d)\b")
 
 
@@ -60,7 +68,9 @@ def jfmt(x):
     """nobs（Java の Double.toString）と同じ書式。1e7 以上の正の数だけを扱う。"""
     if not x >= 1e7:
         raise ConvError("書式にできない値: %r" % x)
-    d = decimal.Decimal(repr(float(x))).normalize()
+    x = float(x)
+    # 整数の Hz なら Python のどの版でも正確に。そうでなければ最短の表記（2.7 以上）から
+    d = decimal.Decimal(int(x) if x == int(x) else repr(x)).normalize()
     sign, digits, exp = d.as_tuple()
     mant = "%d.%s" % (digits[0], "".join(map(str, digits[1:])) or "0")
     return "%sE%d" % (mant, len(digits) - 1 + exp)
@@ -156,7 +166,7 @@ class Plan:
         """ch k の RF（静止系、ドップラー補正なし）。2nd LO は 1st IF の上なので 2nd IF で反転する。"""
         if1 = self.lo2 - self.f2(k)
         f = self.lo1 + if1 if sb == "USB" else self.lo1 - if1
-        return round(f / FQDAT_ROUND) * FQDAT_ROUND
+        return math.floor(f / FQDAT_ROUND + 0.5) * FQDAT_ROUND  # 四捨五入（round は 2 と 3 で違う）
 
     def summary(self):
         out = ["1st LO %.6f GHz（%s %s の OBS_FREQ %.6f − FREQ_IF1 %.6f、ドップラー補正の前）"
@@ -374,9 +384,31 @@ def convert_dat(lines, plan):
 
 # ---------------------------------------------------------------- ファイル
 
+def native(o):
+    """json が返す unicode を、Python 2 では UTF-8 の str にそろえる（日本語のメッセージと混ぜるため）。"""
+    if PY2 and isinstance(o, TEXT):
+        return o.encode("utf-8")
+    if isinstance(o, dict):
+        return dict((native(k), native(v)) for k, v in o.items())
+    if isinstance(o, list):
+        return [native(v) for v in o]
+    return o
+
+
+def load_config(path):
+    with open(path, "rb") as f:
+        return native(json.loads(f.read().decode("utf-8")))
+
+
 def read_lines(path):
-    with open(path, newline="") as f:
-        text = f.read()
+    with open(path, "rb") as f:
+        data = f.read()
+    try:
+        text = data.decode("ascii")
+    except UnicodeDecodeError:
+        raise ConvError("%s: ASCII 以外の文字がある" % path)
+    if PY2:
+        text = data
     if "\r" in text:
         raise ConvError("%s: 改行が LF ではない" % path)
     if not text.endswith("\n"):
@@ -385,8 +417,19 @@ def read_lines(path):
 
 
 def write_lines(path, lines):
-    with open(path, "w", newline="") as f:
-        f.write("\n".join(lines) + "\n")
+    """一時ファイルに書いてから置き換える。途中で止まっても半端なファイルを残さない。"""
+    text = "\n".join(lines) + "\n"
+    tmp = path + ".tz230conv.tmp"
+    with open(tmp, "wb") as f:
+        f.write(text if PY2 else text.encode("ascii"))
+    os.rename(tmp, path)
+
+
+def check_not_converted(lines, plan):
+    """上書きが既定なので、変換済みの指示書をもう一度変換しないようにする。"""
+    for i, l in enumerate(lines):
+        if not l.startswith(("#", "%")) and plan.synthe_rx in l:
+            raise ConvError("%d 行目: 変換済みの指示書のよう（nobs で作り直してから変換する）: %s" % (i + 1, l))
 
 
 def show_diff(name, a, b):
@@ -398,24 +441,23 @@ def show_diff(name, a, b):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    p.add_argument("start", help="nobs が出した .start")
-    p.add_argument("outdir", help="出力先のディレクトリ（入力と別の場所）")
-    p.add_argument("-c", "--config", default=DEFAULT_CONFIG, help="設定（既定: %(default)s）")
-    p.add_argument("--force", action="store_true", help="出力先の同名のファイルを上書きする")
-    args = p.parse_args(argv)
+    p = optparse.OptionParser(usage="python tz230conv.py 入力の.start [-o 出力先のディレクトリ] [-c 設定.json]")
+    p.add_option("-o", "--outdir", default=None,
+                 help="出力先（既定: 入力のファイルをその場で上書き）。同じ名前のほかの拡張子のファイルもコピーする")
+    p.add_option("-c", "--config", default=DEFAULT_CONFIG, help="設定（既定: %default）")
+    args, rest = p.parse_args(argv)
+    if len(rest) != 1:
+        p.error("入力の .start を 1 つ指定する")
+    start = rest[0]
 
     try:
-        if not args.start.endswith(".start"):
-            raise ConvError("入力は .start のファイル: %s" % args.start)
-        indir = os.path.dirname(os.path.abspath(args.start))
-        stem = os.path.basename(args.start)[:-len(".start")]
-        outdir = os.path.abspath(args.outdir)
-        if outdir == indir:
-            raise ConvError("出力先が入力と同じディレクトリ。元のファイルを上書きしてしまう")
+        if not start.endswith(".start"):
+            raise ConvError("入力は .start のファイル: %s" % start)
+        indir = os.path.dirname(os.path.abspath(start))
+        stem = os.path.basename(start)[:-len(".start")]
+        outdir = os.path.abspath(args.outdir) if args.outdir else indir
 
-        with open(args.config) as f:
-            plan = Plan(json.load(f))
+        plan = Plan(load_config(args.config))
 
         files = sorted(x for x in os.listdir(indir)
                        if x.startswith(stem + ".") and "." not in x[len(stem) + 1:])
@@ -424,13 +466,12 @@ def main(argv=None):
 
         start_in = read_lines(os.path.join(indir, stem + ".start"))
         dat_in = read_lines(os.path.join(indir, stem + ".dat"))
+        check_not_converted(start_in, plan)
         start_out = convert_start(start_in, plan)
         dat_out = convert_dat(dat_in, plan)
 
-        os.makedirs(outdir, exist_ok=True)
-        clash = [x for x in files if os.path.exists(os.path.join(outdir, x))]
-        if clash and not args.force:
-            raise ConvError("出力先に同じ名前のファイルがある（--force で上書き）: %s" % ", ".join(clash))
+        if not os.path.isdir(outdir):
+            os.makedirs(outdir)
     except ConvError as e:
         print("エラー: %s" % e, file=sys.stderr)
         return 1
@@ -446,8 +487,10 @@ def main(argv=None):
             write_lines(dst, start_out)
         elif x == stem + ".dat":
             write_lines(dst, dat_out)
-        else:
+        elif outdir != indir:
             shutil.copy2(os.path.join(indir, x), dst)
+        else:
+            continue
         print("書き出し: %s" % dst)
     return 0
 
