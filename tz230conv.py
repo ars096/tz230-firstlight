@@ -543,7 +543,12 @@ def main(argv=None):
 
         start_in = read_lines(os.path.join(indir, stem + ".start"))
         dat_in = read_lines(os.path.join(indir, stem + ".dat"), strict=False)
-        plan = Plan(load_config(args.config), read_window(start_in))
+        window = read_window(start_in)
+        try:
+            plan = Plan(load_config(args.config), window)
+        except KeyError as e:
+            raise ConvError("設定 %s に %s がない。スクリプトと設定ファイル（config/tz230.json）の版がそろっているか確かめる"
+                            % (args.config, e))
         check_not_converted(start_in, plan)
         start_out = convert_start(start_in, plan)
         dat_out, dat_notes = convert_dat(dat_in, plan)

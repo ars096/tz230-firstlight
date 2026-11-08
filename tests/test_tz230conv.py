@@ -4,6 +4,7 @@
 import shutil
 
 import copy
+import json
 import os
 import re
 import sys
@@ -190,6 +191,15 @@ class TestMain(unittest.TestCase):
         self.assertEqual(out, c.convert_start(c.read_lines(SAMPLE), c.Plan(CFG, WINDOW)))
         self.assertEqual(c.main([start]), 1)  # 変換済みはもう一度変換しない
         self.assertEqual(c.read_lines(start), out)
+
+    def test_config_missing_key(self):
+        cfg = copy.deepcopy(CFG)
+        del cfg["synthe"]["ref_num"]
+        path = os.path.join(self.d, "old.json")
+        with open(path, "w") as f:
+            json.dump(cfg, f)
+        self.assertEqual(c.main([SAMPLE, "-o", self.d, "-c", path]), 1)  # トレースバックではなくエラーで止まる
+        self.assertFalse(os.path.exists(os.path.join(self.d, "ori-kl.start")))
 
     def test_outdir(self):
         self.assertEqual(c.main([SAMPLE, "-o", self.d]), 0)
