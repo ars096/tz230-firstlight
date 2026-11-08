@@ -140,30 +140,16 @@ class TestConvert(unittest.TestCase):
             c.Plan(cfg, WINDOW)
 
     def test_dat(self):
-        out, notes = c.convert_dat(c.read_lines(SAMPLE_DAT), self.plan)
-        self.assertEqual(notes, [])
-        self.assertEqual(out[10], "11,TZ2V  ,LSB,10338.000")
-        self.assertEqual(out[11], "12,TZ2V  ,LSB,10604.050")
-        self.assertEqual(out[14], "15,TZ2H  ,LSB,8821.000")  # 使わない行は入力の 2nd LO のまま
-        self.assertEqual(out[0], "01,H20ch1,USB,9122.000")
-        self.assertEqual(out[8], "09,H40   ,USB,8821.000")
-        self.assertEqual(out[4], "05,#     ,")
-
-    def test_dat_any_input(self):
-        """入力の形によらず、決まった書式で 16 行を書く（実機の nobs は `01,#     ,,` のような行も出す）。"""
-        src = ["01,#     ,,", "02,H40   ,USB,9122.000", "junk", "15,#     ,,"]
-        out, notes = c.convert_dat(src, self.plan)
-        self.assertEqual(len(out), 16)
-        self.assertEqual(out[0], "01,H20ch1,USB,")
-        self.assertEqual(out[1], "02,H20ch1,USB,9122.000")
-        self.assertEqual(out[2], "03,H20ch2,USB,")
-        self.assertEqual(out[4], "05,#     ,")
-        self.assertEqual(out[10], "11,TZ2V  ,LSB,10338.000")
-        self.assertEqual(out[11], "12,TZ2V  ,LSB,10604.050")
-        self.assertEqual(out[14], "15,TZ2H  ,LSB,")
-        self.assertEqual(len(notes), 1)
-        out2, _ = c.convert_dat([], self.plan)
-        self.assertEqual(out2[10], "11,TZ2V  ,LSB,10338.000")
+        out = c.convert_dat(self.plan)
+        self.assertEqual(out, [
+            "01,H20ch1,USB,10338.000", "02,H20ch1,USB,10338.000",
+            "03,H20ch2,USB,10338.000", "04,H20ch2,USB,10338.000",
+            "05,#     ,", "06,#     ,", "07,#     ,", "08,#     ,",
+            "09,H40   ,USB,10338.000", "10,H40   ,USB,10338.000",
+            "11,TZ2V  ,LSB,10338.000", "12,TZ2V  ,LSB,10604.050",  # 使う Array
+            "13,H40   ,USB,10338.000", "14,H40   ,USB,10338.000",
+            "15,TZ2H  ,LSB,10338.000", "16,TZ2H  ,LSB,10338.000",
+        ])
 
     def test_dat_switch_must_match_rx_name(self):
         cfg = copy.deepcopy(CFG)

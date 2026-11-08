@@ -416,36 +416,22 @@ def handle_set(dev, par, val, plan, i):
 
 # ---------------------------------------------------------------- .dat
 
-DAT_FREQ = re.compile(r"^\s*(\d+)\s*,.*,\s*(\d+(\.\d*)?)\s*$")
+def convert_dat(plan):
+    """決まった書式（config の dat_switch）で 16 行を書く。入力の .dat の中身は使わない。
 
-
-def convert_dat(lines, plan):
-    """入力の形によらず、決まった書式（config の dat_switch）で 16 行を書く。
-
-    使う Array（設定の arrays）は 2nd LO を書く。それ以外の行は、入力の同じ番号の行に
-    2nd LO があればそれを残し、なければ周波数を書かない。`#` の行は周波数を書かない。
-    戻り値は (書き出す行, 注意のメッセージのリスト)。
+    使う Array（設定の arrays）はそれぞれの 2nd LO を書く。使わない行も 2nd LO が要るので、
+    いちばん番号の小さい使う Array（今は A11）と同じ値を入れる。`#` の行は周波数を書かない。
     """
-    notes = []
-    kept = {}
-    for i, l in enumerate(lines):
-        m = DAT_FREQ.match(l)
-        if m and 1 <= int(m.group(1)) <= 16:
-            kept[int(m.group(1))] = "%.3f" % float(m.group(2))
-        elif l.strip() and not re.match(r"^\s*\d+\s*,", l):
-            notes.append(".dat の入力 %d 行目は読み取れない形。無視して書式どおりに書く: %s" % (i + 1, l))
+    fill = plan.arrays[min(plan.arrays)]["lo2"]
     out = []
     for n in range(1, 17):
         name, sb = plan.dat_switch[n - 1]
-        if name.startswith("#"):  # 使わない行は周波数を書かない
+        if name.startswith("#"):
             out.append("%02d,%-6s," % (n, name))
             continue
-        if n in plan.arrays:
-            freq = "%.3f" % (plan.arrays[n]["lo2"] / 1e6)
-        else:
-            freq = kept.get(n, "")
-        out.append("%02d,%-6s,%-3s,%s" % (n, name, sb, freq))
-    return out, notes
+        lo2 = plan.arrays[n]["lo2"] if n in plan.arrays else fill
+        out.append("%02d,%-6s,%-3s,%.3f" % (n, name, sb, lo2 / 1e6))
+    return out
 
 
 # ---------------------------------------------------------------- ファイル
@@ -558,7 +544,7 @@ def main(argv=None):
                             % (args.config, e))
         check_not_converted(start_in, plan)
         start_out = convert_start(start_in, plan)
-        dat_out, dat_notes = convert_dat(dat_in, plan)
+        dat_out = convert_dat(plan)
 
         if not os.path.isdir(outdir):
             os.makedirs(outdir)
@@ -570,8 +556,6 @@ def main(argv=None):
     print()
     show_diff(stem + ".start", start_in, start_out)
     show_diff(stem + ".dat", dat_in, dat_out)
-    for x in dat_notes:
-        print("注意: %s" % x)
     print()
     for x in files:
         dst = os.path.join(outdir, x)
