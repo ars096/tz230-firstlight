@@ -97,6 +97,7 @@ class TestConvert(unittest.TestCase):
         self.assertEqual(sam45_list(out, "RX_NAME"), [""] * 14 + ["TZ2H", "TZ2H"] + [""] * 16)
         self.assertEqual(sam45_list(out, "REST_FREQ"), ["0.0"] * 14 + ["2.30538E11", "2.1559595E11"] + ["0.0"] * 16)
         self.assertEqual(sam45_list(out, "ARRAY"), ["0"] * 14 + ["1", "1"] + ["0"] * 16)
+        self.assertEqual(sam45_list(out, "REF_NUM"), ["0"] * 14 + ["14", "14"] + ["0"] * 16)  # SYNTHE_N は 14
         self.assertEqual(sam45_list(out, "IFATT"), ["0"] * 14 + ["5", "5"] + ["0"] * 16)
         self.assertEqual(sam45_list(out, "FQDAT_CH"), ["0"] * 28 + ["4096", "1", "4096", "1"] + ["0"] * 32)
         self.assertEqual(sam45_list(out, "FQDAT_FQ")[28:30], ["2.3047552E11", "2.3060048E11"])

@@ -83,6 +83,7 @@ RF (OBS_FREQ) --1st LO--> 1st IF (FREQ_IF1) --2nd LO (.dat, MHz)--> 2nd IF 2–4
 - SAM45 の `START_CHAN` は 16 か 64 の倍数のはずなので、念のため 64 の倍数に限る（サンプルの 245760 = 64 × 3840）。
 - `.start` の書き換え:
   - SG は 1 つだけ使う。`SYNTHE_K` を **`SYNTHE_N`** にし、`SET SYNTHE_N RX_NAME 'TZ230DSB'`。
+  - `SET SAM45 REF_NUM`（Array が参照する SG の番号）は、`SYNTHE_N` に対応する **14**（H40 の `SYNTHE_K` は 11）。
   - `SET ANT POINTING 'TZ2'`。
   - `SET SAM45 RX_NAME` は `TZ2H`。
   - 冒頭の MLPPS（LO スイッチの切り替え）は `#` でコメントアウトする。

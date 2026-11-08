@@ -2,6 +2,7 @@
   "_comment": "TZ 230 GHz モード（DSB）、1st LO 223.2 GHz。A15 = USB CO(2-1)、A16 = LSB SiO v=1 (5-4)。線が 2nd IF 3 GHz に来るよう Array ごとに 2nd LO を決める。window が null なら SAM45 の窓は入力のまま。docs/policy.md を参照。",
   "synthe": {
     "name": "SYNTHE_N",
+    "ref_num": 14,
     "rx_name": "TZ230DSB",
     "obs_freq": 230.538e9,
     "freq_if1": 7.338e9,

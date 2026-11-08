@@ -101,6 +101,7 @@ class Plan:
         s = cfg["synthe"]
         self.synthe = s["name"]
         self.synthe_rx = s["rx_name"]
+        self.ref_num = int(s["ref_num"])  # SAM45 REF_NUM で SG を指す番号（SYNTHE_N は 14）
         self.obs_freq = float(s["obs_freq"])
         self.freq_if1 = float(s["freq_if1"])
         self.synthe_sb = s["sideband"]
@@ -278,7 +279,7 @@ REQUIRED = [
     ("ANT", "POINTING"),
     ("SYNTHE", "OBS_FREQ"), ("SYNTHE", "FREQ_IF1"), ("SYNTHE", "RX_NAME"), ("SYNTHE", "SIDBD_TYP"),
     ("RXT", "OBS_FREQ"), ("RXT", "FREQ_IF1"), ("RXT", "RX_NAME"),
-    ("SAM45", "SIDBD_TYP"), ("SAM45", "REST_FREQ"), ("SAM45", "OBS_FREQ"), ("SAM45", "FREQ_IF1"),
+    ("SAM45", "SIDBD_TYP"), ("SAM45", "REF_NUM"), ("SAM45", "REST_FREQ"), ("SAM45", "OBS_FREQ"), ("SAM45", "FREQ_IF1"),
     ("SAM45", "RX_NAME"), ("SAM45", "OBS_BAND"), ("SAM45", "ARRAY"),
     ("SAM45", "FQDAT_F0"), ("SAM45", "FQDAT_FQ"),
     ("SAM45", "START_CHAN_SUB1"), ("SAM45", "END_CHAN_SUB1"), ("SAM45", "CHAN_AVG_SUB1"),
@@ -356,6 +357,11 @@ def handle_set(dev, par, val, plan, i):
 
     if par == "SIDBD_TYP":
         return per_array(val, N_ARRAY, each("sb", str), i, par)
+    if par == "REF_NUM":
+        def f(items):
+            for n in A:
+                items[n - 1] = str(plan.ref_num)
+        return per_array(val, N_ARRAY, f, i, par)
     if par == "RX_NAME":
         return per_array(val, N_ARRAY, each("rx", str), i, par)
     if par in ("REST_FREQ", "FQDAT_F0"):

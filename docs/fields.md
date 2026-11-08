@@ -44,6 +44,7 @@ nobs が出す `.start` と `.dat` のうち、周波数に関係する欄の一
 | `SET RXT FREQ_IF1 (…)` | 同じく `FREQ_IF1` | 変える |
 | `SET RXT RX_NAME` | 受信機名 | 決定は policy.md |
 | `SET SAM45 SIDBD_TYP` | Array ごと（32） | 決定は policy.md |
+| `SET SAM45 REF_NUM` | Array ごとに参照する SG の番号（`SYNTHE_K` = 11、`SYNTHE_N` = 14） | 変える |
 | `SET SAM45 REST_FREQ` | Array ごとの静止周波数（32） | 変える |
 | `SET SAM45 OBS_FREQ` | Array ごとの `OBS_FREQ`（32） | 変える |
 | `SET SAM45 FREQ_IF1` | Array ごとの `FREQ_IF1`（32） | 変える |
