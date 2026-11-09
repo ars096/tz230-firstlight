@@ -6,6 +6,7 @@ nobs で作った H40 の観測指示書（`.start`・`.dat`）を、230 GHz 用
 - 方針: [`docs/policy.md`](docs/policy.md)
 - 指示書の周波数まわりの欄と式: [`docs/fields.md`](docs/fields.md)
 - 今回わかったこと（今後のプロジェクト向けの要点）: [`docs/lessons.md`](docs/lessons.md)
+- 元の `.start`・`.dat` のどこを書き換えるか: [`docs/changes.md`](docs/changes.md)
 
 ## 使い方
 
